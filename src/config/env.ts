@@ -8,6 +8,7 @@ const envSchema = z.object({
     TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required'),
     PORT: z.string().default('3000'),
     NOTIFY_API_KEY: z.string().default('hvn-default-secure-key-2024'), // Shared secret between UI and Bot
+    ENABLE_SERVER: z.string().default('true'),
 
     // Telegram Group IDs
     TG_GROUP_INVENTORY: z.string().optional(),
