@@ -1,18 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { handleCreateUserResponse } from './createUserFlow';
-import { handleDeleteUserResponse } from './deleteUserFlow';
-import { handleEditUserResponse } from './editUserFlow';
-
+import { registerCreateUserFlow } from './createUserFlow';
+import { registerDeleteUserFlow } from './deleteUserFlow';
+import { registerEditUserFlow } from './editUserFlow';
 
 export function registerUserFlows(bot: TelegramBot) {
-    bot.on('message', (msg) => {
-        handleCreateUserResponse(bot, { message: msg });
-        handleEditUserResponse(bot, { message: msg });
-    });
-
-    bot.on('callback_query', (callbackQuery) => {
-        handleCreateUserResponse(bot, { callback_query: callbackQuery });
-        handleDeleteUserResponse(bot, callbackQuery);
-        handleEditUserResponse(bot, { callback_query: callbackQuery });
-    });
+    registerCreateUserFlow(bot);
+    registerDeleteUserFlow(bot);
+    registerEditUserFlow(bot);
 }

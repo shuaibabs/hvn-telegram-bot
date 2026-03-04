@@ -1,12 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerGeneralCommands = registerGeneralCommands;
-function registerGeneralCommands(router) {
+import { CommandRouter } from '../core/router/commandRouter';
+
+export function registerGeneralCommands(router: CommandRouter) {
     // Health check command
     router.register(/\/health/, (msg) => {
         const chatId = msg.chat.id;
         router.bot.sendMessage(chatId, '✅ Bot is up and running!');
     });
+
     // Start command
     router.register(/\/start/, (msg) => {
         const chatId = msg.chat.id;
@@ -20,6 +20,7 @@ Here are the available commands:
 `;
         router.bot.sendMessage(chatId, welcomeMessage);
     });
+
     // Menu command
     router.register(/\/menu/, (msg) => {
         const chatId = msg.chat.id;

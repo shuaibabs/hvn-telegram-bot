@@ -46,7 +46,7 @@ const apiKeyGuard = (req, res, next) => {
     }
     next();
 };
-function startServer() {
+function startServer(bot) {
     const app = (0, express_1.default)();
     // Apply Security Middlewares
     app.use((0, helmet_1.default)());

@@ -1,12 +1,19 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { GROUPS } from '../../../config/env';
-import { adminOnly } from '../../../shared/middleware/auth';
-import { validateGroup } from '../../../shared/services/validation';
-import { listUsers } from '../flows/viewUsersFlow';
+import { getAllUsers } from '../userService';
 
-export function listUsersCommand(bot: TelegramBot) {
-    bot.onText(/\/listusers/, adminOnly(bot, async (msg) => {
-        if (!validateGroup(bot, msg, GROUPS.USERS, 'User Management')) return;
-        await listUsers(bot, msg.chat.id);
-    }));
+export async function listUsersCommand(bot: TelegramBot, msg: TelegramBot.Message) {
+    try {
+        const users = await getAllUsers();
+        let message = "*All Users:*\n";
+        if(users.length === 0) {
+            message = "No users found.";
+        } else {
+            users.forEach(user => {
+                message += `\n*${user.displayName}* (@${user.telegramUsername}) - ${user.role}\nEmail: ${user.email}\n`;
+            });
+        }
+        bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
+    } catch (error: any) {
+        bot.sendMessage(msg.chat.id, `Error fetching users: ${error.message}`);
+    }
 }

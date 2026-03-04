@@ -9,5 +9,5 @@ console.log('🤖 Telegram bot initialized and listening...');
 
 // Start the Express server for UI notifications if configured
 if (env.ENABLE_SERVER) {
-    startServer();
+    startServer(bot);
 }

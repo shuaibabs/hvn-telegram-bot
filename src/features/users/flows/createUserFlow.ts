@@ -3,8 +3,6 @@ import { User, addUser } from '../userService';
 import { getSession, setSession, clearSession } from '../../../core/bot/sessionManager';
 import { isValidEmail } from '../../../shared/utils/emailValidation';
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-
 const CREATE_STAGES = {
     AWAIT_NAME: 'AWAIT_NAME',
     AWAIT_EMAIL: 'AWAIT_EMAIL',
@@ -18,8 +16,6 @@ type CreateUserSession = {
     newUser: Partial<User>;
 };
 
-// ─── Flow Steps ─────────────────────────────────────────────────────────────
-
 export async function startCreateUserFlow(bot: TelegramBot, chatId: number) {
     setSession(chatId, 'createUser', {
         stage: 'AWAIT_NAME',
@@ -28,7 +24,10 @@ export async function startCreateUserFlow(bot: TelegramBot, chatId: number) {
     await bot.sendMessage(chatId, "Let's create a new user. What is their full name?");
 }
 
-async function handleNameInput(bot: TelegramBot, msg: TelegramBot.Message, session: CreateUserSession) {
+async function handleNameInput(bot: TelegramBot, msg: TelegramBot.Message) {
+    const session = getSession(msg.chat.id, 'createUser') as CreateUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_NAME') return;
+
     const name = msg.text?.trim();
     if (!name) {
         await bot.sendMessage(msg.chat.id, "Name cannot be empty. Please enter the user's full name.");
@@ -42,7 +41,10 @@ async function handleNameInput(bot: TelegramBot, msg: TelegramBot.Message, sessi
     await bot.sendMessage(msg.chat.id, `Got it. Now, what is ${name}'s email address?`);
 }
 
-async function handleEmailInput(bot: TelegramBot, msg: TelegramBot.Message, session: CreateUserSession) {
+async function handleEmailInput(bot: TelegramBot, msg: TelegramBot.Message) {
+    const session = getSession(msg.chat.id, 'createUser') as CreateUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_EMAIL') return;
+
     const email = msg.text?.trim();
     if (!email || !isValidEmail(email)) {
         await bot.sendMessage(msg.chat.id, "That doesn't look like a valid email. Please try again.");
@@ -66,7 +68,10 @@ async function handleEmailInput(bot: TelegramBot, msg: TelegramBot.Message, sess
     });
 }
 
-async function handleRoleSelection(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, session: CreateUserSession) {
+async function handleRoleSelection(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
+    const session = getSession(callbackQuery.message!.chat.id, 'createUser') as CreateUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_ROLE') return;
+
     const role = callbackQuery.data === 'create_user_role_admin' ? 'admin' : 'employee';
     session.newUser.role = role;
     session.stage = 'AWAIT_TELEGRAM';
@@ -76,7 +81,10 @@ async function handleRoleSelection(bot: TelegramBot, callbackQuery: TelegramBot.
     await bot.sendMessage(callbackQuery.message!.chat.id, `Role set to ${role}. Finally, what is their Telegram username? (e.g., @username)`);
 }
 
-async function handleTelegramInput(bot: TelegramBot, msg: TelegramBot.Message, session: CreateUserSession) {
+async function handleTelegramInput(bot: TelegramBot, msg: TelegramBot.Message) {
+    const session = getSession(msg.chat.id, 'createUser') as CreateUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_TELEGRAM') return;
+
     const username = msg.text?.trim().replace(/^@/, '');
     if (!username) {
         await bot.sendMessage(msg.chat.id, "Username cannot be empty. Please enter their Telegram username.");
@@ -108,7 +116,10 @@ async function sendConfirmation(bot: TelegramBot, chatId: number, session: Creat
     });
 }
 
-async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, session: CreateUserSession) {
+async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
+    const session = getSession(callbackQuery.message!.chat.id, 'createUser') as CreateUserSession | undefined;
+    if (!session || session.stage !== 'CONFIRM') return;
+    
     const decision = callbackQuery.data;
     const chatId = callbackQuery.message!.chat.id;
 
@@ -116,7 +127,6 @@ async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.C
 
     if (decision === 'create_user_confirm_yes') {
         try {
-            // The user object is validated by the addUser service
             await addUser(session.newUser as User);
             await bot.sendMessage(chatId, `✅ Success! User *${session.newUser.displayName}* has been created.`, { parse_mode: 'Markdown' });
         } catch (error: any) {
@@ -124,40 +134,38 @@ async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.C
         }
     } else {
         await bot.sendMessage(chatId, "Cancelled. Let's start over.");
-        await startCreateUserFlow(bot, chatId); // Restart the flow
+        await startCreateUserFlow(bot, chatId); 
     }
     clearSession(chatId, 'createUser');
 }
 
-// ─── Main Handler ───────────────────────────────────────────────────────────
+export function registerCreateUserFlow(bot: TelegramBot) {
+    bot.on('message', (msg) => {
+        const session = getSession(msg.chat.id, 'createUser') as CreateUserSession | undefined;
+        if (!session) return;
 
-export async function handleCreateUserResponse(bot: TelegramBot, update: { message?: TelegramBot.Message, callback_query?: TelegramBot.CallbackQuery }) {
-    const msg = update.message;
-    const callbackQuery = update.callback_query;
-    const chatId = msg?.chat.id || callbackQuery?.message?.chat.id;
-
-    if (!chatId) return;
-
-    const session = getSession(chatId, 'createUser') as CreateUserSession | undefined;
-    if (!session) return; // Not in a create user flow
-
-    if (callbackQuery) {
-        if (session.stage === 'AWAIT_ROLE') {
-            await handleRoleSelection(bot, callbackQuery, session);
-        } else if (session.stage === 'CONFIRM') {
-            await handleConfirmation(bot, callbackQuery, session);
-        }
-    } else if (msg && msg.text) {
         switch (session.stage) {
             case 'AWAIT_NAME':
-                await handleNameInput(bot, msg, session);
+                handleNameInput(bot, msg);
                 break;
             case 'AWAIT_EMAIL':
-                await handleEmailInput(bot, msg, session);
+                handleEmailInput(bot, msg);
                 break;
             case 'AWAIT_TELEGRAM':
-                await handleTelegramInput(bot, msg, session);
+                handleTelegramInput(bot, msg);
                 break;
         }
-    }
+    });
+
+    bot.on('callback_query', (callbackQuery) => {
+        const session = getSession(callbackQuery.message!.chat.id, 'createUser') as CreateUserSession | undefined;
+        if (!session) return;
+
+        if (callbackQuery.data?.startsWith('create_user_role_')) {
+            handleRoleSelection(bot, callbackQuery);
+        }
+        if (callbackQuery.data?.startsWith('create_user_confirm_')) {
+            handleConfirmation(bot, callbackQuery);
+        }
+    });
 }

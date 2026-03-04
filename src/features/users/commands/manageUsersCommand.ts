@@ -1,29 +1,18 @@
-import TelegramBot, { SendMessageOptions } from 'node-telegram-bot-api';
-import { GROUPS } from '../../../config/env';
-import { validateGroup } from '../../../shared/services/validation';
+import TelegramBot from 'node-telegram-bot-api';
 
-export function manageUsersCommand(bot: TelegramBot) {
-    bot.onText(/\/manageusers/, (msg) => {
-        if (!validateGroup(bot, msg, GROUPS.USERS, 'User Management')) return;
-        sendUsersMenu(bot, msg.chat.id);
-    });
-}
+export function manageUsersCommand(bot: TelegramBot, msg: TelegramBot.Message) {
+    const chatId = msg.chat.id;
 
-export function sendUsersMenu(bot: TelegramBot, chatId: number) {
     const text = "*User Management*\n\nWhat would you like to do?";
 
-    const options: SendMessageOptions = {
+    const options: TelegramBot.SendMessageOptions = {
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
-                [
-                    { text: '👤 Create User', callback_data: 'create_user' },
-                    { text: '✏️ Edit User', callback_data: 'edit_user' },
-                ],
-                [
-                    { text: '🗑️ Delete User', callback_data: 'delete_user' },
-                    { text: '👁️ View Users', callback_data: 'view_users' },
-                ],
+                [{ text: "List Users", callback_data: "manage_users_list" }],
+                [{ text: "Add User", callback_data: "manage_users_add" }],
+                [{ text: "Edit User", callback_data: "manage_users_edit" }],
+                [{ text: "Delete User", callback_data: "manage_users_delete" }],
             ],
         },
     };

@@ -10,14 +10,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listUsersCommand = listUsersCommand;
-const env_1 = require("../../../config/env");
-const auth_1 = require("../../../shared/middleware/auth");
-const validation_1 = require("../../../shared/services/validation");
-const viewUsersFlow_1 = require("../flows/viewUsersFlow");
-function listUsersCommand(bot) {
-    bot.onText(/\/listusers/, (0, auth_1.adminOnly)(bot, (msg) => __awaiter(this, void 0, void 0, function* () {
-        if (!(0, validation_1.validateGroup)(bot, msg, env_1.GROUPS.USERS, 'User Management'))
-            return;
-        yield (0, viewUsersFlow_1.listUsers)(bot, msg.chat.id);
-    })));
+const userService_1 = require("../userService");
+function listUsersCommand(bot, msg) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const users = yield (0, userService_1.getAllUsers)();
+            let message = "*All Users:*\n";
+            if (users.length === 0) {
+                message = "No users found.";
+            }
+            else {
+                users.forEach(user => {
+                    message += `\n*${user.displayName}* (@${user.telegramUsername}) - ${user.role}\nEmail: ${user.email}\n`;
+                });
+            }
+            bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
+        }
+        catch (error) {
+            bot.sendMessage(msg.chat.id, `Error fetching users: ${error.message}`);
+        }
+    });
 }

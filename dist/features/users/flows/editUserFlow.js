@@ -10,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startEditUserFlow = startEditUserFlow;
-exports.handleEditUserResponse = handleEditUserResponse;
+exports.registerEditUserFlow = registerEditUserFlow;
 const userService_1 = require("../userService");
 const sessionManager_1 = require("../../../core/bot/sessionManager");
 const EDIT_STAGES = {
@@ -27,7 +27,7 @@ function startEditUserFlow(bot, chatId) {
             }
             const userButtons = users.map((user) => ([{
                     text: `${user.displayName} (${user.role}) - @${user.telegramUsername}`,
-                    callback_data: `edit_user_select_${user.id}`
+                    callback_data: `edit_user_select_${user.id}:${user.displayName}`
                 }]));
             const options = {
                 reply_markup: {
@@ -44,35 +44,63 @@ function startEditUserFlow(bot, chatId) {
         }
     });
 }
-function handleEditUserResponse(bot, response) {
+function handleUserSelection(bot, callbackQuery) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
-        const msg = response.message || ((_a = response.callback_query) === null || _a === void 0 ? void 0 : _a.message);
+        const msg = callbackQuery.message;
         if (!msg)
             return;
         const chatId = msg.chat.id;
         const session = (0, sessionManager_1.getSession)(chatId, 'editUser');
-        if (!session)
+        if (!session || session.stage !== 'AWAIT_USER_SELECTION')
             return;
-        const data = (_b = response.callback_query) === null || _b === void 0 ? void 0 : _b.data;
-        if ((data === null || data === void 0 ? void 0 : data.startsWith('edit_user_select_')) && session.stage === 'AWAIT_USER_SELECTION') {
-            const userId = data.split('_').pop();
-            session.stage = 'AWAIT_NEW_USERNAME';
-            session.userId = userId;
-            (0, sessionManager_1.setSession)(chatId, 'editUser', session);
-            yield bot.deleteMessage(chatId, msg.message_id);
-            yield bot.sendMessage(chatId, "Please enter the new Telegram username for the user (e.g., @newusername).");
+        const data = callbackQuery.data;
+        if (!data)
+            return;
+        const [_, userId, displayName] = data.match(/edit_user_select_(.+):(.+)/) || [];
+        session.stage = 'AWAIT_NEW_USERNAME';
+        session.userId = userId;
+        session.displayName = displayName;
+        (0, sessionManager_1.setSession)(chatId, 'editUser', session);
+        yield bot.answerCallbackQuery(callbackQuery.id);
+        yield bot.deleteMessage(chatId, msg.message_id);
+        yield bot.sendMessage(chatId, `Please enter the new Telegram username for *${displayName}* (e.g., @newusername).`, { parse_mode: 'Markdown' });
+    });
+}
+function handleUsernameInput(bot, message) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        const chatId = message.chat.id;
+        const session = (0, sessionManager_1.getSession)(chatId, 'editUser');
+        if (!session || session.stage !== 'AWAIT_NEW_USERNAME' || !session.userId)
+            return;
+        const newUsername = (_a = message.text) === null || _a === void 0 ? void 0 : _a.trim().replace(/^@/, '');
+        if (!newUsername) {
+            yield bot.sendMessage(chatId, "Username cannot be empty. Please enter a valid username.");
+            return;
         }
-        else if (((_c = response.message) === null || _c === void 0 ? void 0 : _c.text) && session.stage === 'AWAIT_NEW_USERNAME') {
-            const newUsername = response.message.text.replace(/^@/, '');
-            try {
-                yield (0, userService_1.updateUserTelegramUsername)(session.userId, newUsername);
-                yield bot.sendMessage(chatId, `User @${newUsername} has been updated.`);
-            }
-            catch (error) {
-                yield bot.sendMessage(chatId, `Error updating user: ${error.message}`);
-            }
+        try {
+            yield (0, userService_1.updateUserTelegramUsername)(session.userId, newUsername);
+            yield bot.sendMessage(chatId, `✅ Success! User *${session.displayName}* has been updated to @${newUsername}.`, { parse_mode: 'Markdown' });
+        }
+        catch (error) {
+            yield bot.sendMessage(chatId, `❌ An error occurred: ${error.message}`);
+        }
+        finally {
             (0, sessionManager_1.clearSession)(chatId, 'editUser');
+        }
+    });
+}
+function registerEditUserFlow(bot) {
+    bot.on('callback_query', (callbackQuery) => {
+        var _a;
+        if ((_a = callbackQuery.data) === null || _a === void 0 ? void 0 : _a.startsWith('edit_user_select_')) {
+            handleUserSelection(bot, callbackQuery);
+        }
+    });
+    bot.on('message', (message) => {
+        const session = (0, sessionManager_1.getSession)(message.chat.id, 'editUser');
+        if (session && session.stage === 'AWAIT_NEW_USERNAME') {
+            handleUsernameInput(bot, message);
         }
     });
 }

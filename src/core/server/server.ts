@@ -1,10 +1,10 @@
-
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { env } from '../../config/env';
 import { broadcast } from '../../features/broadcast/broadcastService';
+import TelegramBot from 'node-telegram-bot-api';
 
 const NotifySchema = z.object({
     groupName: z.string().optional(),
@@ -36,7 +36,7 @@ const apiKeyGuard = (req: Request, res: Response, next: NextFunction) => {
     next();
 };
 
-export function startServer() {
+export function startServer(bot: TelegramBot) {
     const app = express();
 
     // Apply Security Middlewares
@@ -85,4 +85,3 @@ export function startServer() {
 
     return app;
 }
-

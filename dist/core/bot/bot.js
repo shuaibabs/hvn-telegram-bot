@@ -7,23 +7,33 @@ exports.initializeBot = initializeBot;
 exports.getBot = getBot;
 const node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
 const env_1 = require("../../config/env");
+const commandRouter_1 = require("../router/commandRouter");
+const general_1 = require("../../commands/general");
+const commands_1 = require("../../features/users/commands");
 const flows_1 = require("../../features/users/flows");
-const flows_2 = require("../../features/financial/flows");
 let bot = null;
+let commandRouter = null;
 function initializeBot() {
     if (env_1.env.TELEGRAM_BOT_TOKEN) {
         bot = new node_telegram_bot_api_1.default(env_1.env.TELEGRAM_BOT_TOKEN, { polling: true });
         console.log("Bot has been initialized.");
-        // Register all feature flows
+        commandRouter = new commandRouter_1.CommandRouter(bot);
+        // Register commands
+        (0, general_1.registerGeneralCommands)(commandRouter);
+        (0, commands_1.registerUserCommands)(commandRouter);
+        // Register flows
         (0, flows_1.registerUserFlows)(bot);
-        (0, flows_2.registerFinancialFlows)(bot);
+        // Start listening for commands
+        commandRouter.listen();
         // Generic error handling
         bot.on('polling_error', (error) => {
             console.error(`Polling error: ${error.message}`);
         });
+        return bot;
     }
     else {
         console.error("Telegram bot token is not defined.");
+        throw new Error("Telegram bot token is not defined.");
     }
 }
 function getBot() {

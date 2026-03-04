@@ -1,12 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { GROUPS } from '../../../config/env';
-import { adminOnly } from '../../../shared/middleware/auth';
-import { validateGroup } from '../../../shared/services/validation';
 import { startDeleteUserFlow } from '../flows/deleteUserFlow';
 
-export function deleteUserCommand(bot: TelegramBot) {
-    bot.onText(/\/deleteuser/, adminOnly(bot, async (msg, _match, _username) => {
-        if (!validateGroup(bot, msg, GROUPS.USERS, 'User Management')) return;
-        await startDeleteUserFlow(bot, msg.chat.id);
-    }));
+export function deleteUserCommand(bot: TelegramBot, msg: TelegramBot.Message) {
+    startDeleteUserFlow(bot, msg.chat.id);
 }

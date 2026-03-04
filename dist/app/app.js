@@ -11,5 +11,5 @@ const bot = new node_telegram_bot_api_1.default(env_1.env.TELEGRAM_BOT_TOKEN, { 
 console.log('🤖 Telegram bot initialized and listening...');
 // Start the Express server for UI notifications if configured
 if (env_1.env.ENABLE_SERVER) {
-    (0, server_1.startServer)();
+    (0, server_1.startServer)(bot);
 }
