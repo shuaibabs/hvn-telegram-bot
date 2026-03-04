@@ -3,8 +3,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { env } from './config/env';
-import { broadcast } from './services/broadcastService';
+import { env } from '../../config/env';
+import { broadcast } from '../../features/broadcast/broadcastService';
 
 const NotifySchema = z.object({
     groupName: z.string().optional(),

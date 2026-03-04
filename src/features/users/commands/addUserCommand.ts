@@ -1,21 +1,22 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { addUser } from '../services/userService';
-import { broadcast } from '../../broadcast/broadcastService';
+import { addUser, UserRole } from '../userService';
+import { broadcast } from '../../../features/broadcast/broadcastService';
 import { GROUPS } from '../../../config/env';
 import { adminOnly } from '../../../shared/middleware/auth';
-import { validateGroup } from '../../../shared/middleware/validation';
+import { validateGroup } from '../../../shared/services/validation';
 
 export function addUserCommand(bot: TelegramBot) {
-    bot.onText(/\/adduser (\S+) (.+) (admin|employee) (\S+)/, adminOnly(bot, async (msg, match, username) => {
+    bot.onText(/\/adduser (\S+) (.+) (admin|employee) (\S+)/, adminOnly(bot, async (msg: TelegramBot.Message, match: RegExpExecArray | null, username: string) => {
         if (!validateGroup(bot, msg, GROUPS.USERS, 'User Management')) return;
+        if(!match) return;
         const [_, email, name, role, tgUsername] = match!;
         try {
             await addUser({
                 email,
                 displayName: name,
-                role: role as any,
+                role: role as UserRole,
                 telegramUsername: tgUsername,
-            }, username);
+            });
 
             const successMsg = `✅ New user *${name}* (${role}) added! (By Admin: @${username})`;
             bot.sendMessage(msg.chat.id, successMsg, { parse_mode: 'Markdown' });

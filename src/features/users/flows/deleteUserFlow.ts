@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getAllUsers, deleteUser } from '../services/userService';
+import { getAllUsers, deleteUser, User } from '../userService';
 
 export async function startDeleteUserFlow(bot: TelegramBot, chatId: number) {
     try {
@@ -10,7 +10,7 @@ export async function startDeleteUserFlow(bot: TelegramBot, chatId: number) {
             return;
         }
 
-        const userButtons = users.map(user => ([{
+        const userButtons = users.map((user: User) => ([{
             text: `${user.displayName} (${user.role}) - @${user.telegramUsername}`,
             callback_data: `delete_user_confirm_${user.id}`
         }]));
@@ -39,7 +39,7 @@ export async function handleDeleteUserResponse(bot: TelegramBot, callbackQuery: 
         await bot.deleteMessage(chatId, message.message_id);
 
         try {
-            await deleteUser(userId!, 'admin'); // Assuming admin is performing the action
+            await deleteUser(userId!); // Assuming admin is performing the action
             await bot.sendMessage(chatId, `User with ID ${userId} has been deleted.`);
         } catch (error: any) {
             await bot.sendMessage(chatId, `Error deleting user: ${error.message}`);

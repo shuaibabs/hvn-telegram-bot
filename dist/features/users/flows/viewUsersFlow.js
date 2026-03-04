@@ -9,31 +9,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const firebase_1 = require("./src/config/firebase");
-function listUsers() {
+exports.listUsers = listUsers;
+const userService_1 = require("../userService");
+function listUsers(bot, chatId) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const snapshot = yield firebase_1.db.collection('users').get();
-            if (snapshot.empty) {
-                console.log('No users found.');
+            const users = yield (0, userService_1.getAllUsers)();
+            if (users.length === 0) {
+                yield bot.sendMessage(chatId, "There are no users in the system.");
                 return;
             }
-            console.log('--- Authorized Users ---');
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                console.log(`Document ID: ${doc.id}`);
-                console.log(`- telegramUsername: ${data.telegramUsername}`);
-                console.log(`- role: ${data.role}`);
-                console.log(`- displayName: ${data.displayName}`);
-                console.log('-------------------------');
-            });
+            const userList = users.map((user) => {
+                return `*${user.displayName}* (${user.role}) - @${user.telegramUsername}`;
+            }).join('\n');
+            const message = `*All Users: *\n\n${userList}`;
+            yield bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
         }
         catch (error) {
-            console.error('Error fetching users:', error);
-        }
-        finally {
-            process.exit();
+            yield bot.sendMessage(chatId, `Error fetching users: ${error.message}`);
         }
     });
 }
-listUsers();

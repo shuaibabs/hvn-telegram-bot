@@ -1,14 +1,15 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { db } from '../../../config/firebase';
+import { addUserCommand } from './addUserCommand';
+import { deleteUserCommand } from './deleteUserCommand';
+import { editUserCommand } from './editUserCommand';
+import { listUsersCommand } from './listUsersCommand';
+import { manageUsersCommand } from './manageUsersCommand';
+
 
 export function registerUserCommands(bot: TelegramBot) {
-    bot.onText(/\/start/, (msg) => {
-        const chatId = msg.chat.id;
-        bot.sendMessage(chatId, 'Welcome! Use /help to see available commands.');
-    });
-
-    bot.onText(/\/help/, (msg) => {
-        const chatId = msg.chat.id;
-        bot.sendMessage(chatId, 'Available commands:\n/start - Welcome message\n/help - Show this message');
-    });
+    addUserCommand(bot);
+    deleteUserCommand(bot);
+    editUserCommand(bot);
+    listUsersCommand(bot);
+    manageUsersCommand(bot);
 }

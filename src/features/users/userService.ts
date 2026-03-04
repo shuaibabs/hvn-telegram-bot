@@ -1,9 +1,8 @@
-
 import { db } from '../../config/firebase';
 
 export type UserRole = 'admin' | 'employee';
 
-export interface UserData {
+export interface User {
     uid?: string;
     email: string;
     displayName: string;
@@ -12,7 +11,7 @@ export interface UserData {
     id?: string;
 }
 
-export const addUser = async (userData: UserData, adminUsername: string) => {
+export const addUser = async (userData: User) => {
     const usersRef = db.collection('users');
 
     // Check if user already exists (by email or telegramUsername)
@@ -37,7 +36,7 @@ export const addUser = async (userData: UserData, adminUsername: string) => {
     return newUser;
 };
 
-export const deleteUser = async (userId: string, adminUsername: string) => {
+export const deleteUser = async (userId: string) => {
     const userRef = db.collection('users').doc(userId);
     const userDoc = await userRef.get();
 
@@ -46,12 +45,12 @@ export const deleteUser = async (userId: string, adminUsername: string) => {
     await userRef.delete();
 };
 
-export const getAllUsers = async () => {
+export const getAllUsers = async (): Promise<User[]> => {
     const snapshot = await db.collection('users').get();
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as UserData));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as User));
 };
 
-export const updateUserTelegramUsername = async (userId: string, telegramUsername: string, adminUsername: string) => {
+export const updateUserTelegramUsername = async (userId: string, telegramUsername: string) => {
     const userRef = db.collection('users').doc(userId);
     const userDoc = await userRef.get();
 
@@ -60,3 +59,15 @@ export const updateUserTelegramUsername = async (userId: string, telegramUsernam
     await userRef.update({ telegramUsername });
 };
 
+export const getUserByTelegramUsername = async (telegramUsername: string): Promise<User | null> => {
+    const usersRef = db.collection('users');
+    const querySnapshot = await usersRef.where('telegramUsername', '==', telegramUsername).get();
+
+    if (querySnapshot.empty) {
+        return null;
+    }
+
+    // Assuming telegramUsername is unique, return the first found user
+    const userDoc = querySnapshot.docs[0];
+    return { id: userDoc.id, ...userDoc.data() } as User;
+};

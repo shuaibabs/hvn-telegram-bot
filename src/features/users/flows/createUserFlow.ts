@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { UserData, addUser } from '../services/userService';
-import { getSession, setSession, clearSession } from '../../../shared/services/sessionManager';
-import { isValidEmail } from '../../../shared/services/validation';
+import { User, addUser } from '../userService';
+import { getSession, setSession, clearSession } from '../../../core/bot/sessionManager';
+import { isValidEmail } from '../../../shared/utils/emailValidation';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ const CREATE_STAGES = {
 
 type CreateUserSession = {
     stage: keyof typeof CREATE_STAGES;
-    newUser: Partial<UserData>;
+    newUser: Partial<User>;
 };
 
 // ─── Flow Steps ─────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.C
     if (decision === 'create_user_confirm_yes') {
         try {
             // The user object is validated by the addUser service
-            await addUser(session.newUser as any, 'Telegram Bot');
+            await addUser(session.newUser as User);
             await bot.sendMessage(chatId, `✅ Success! User *${session.newUser.displayName}* has been created.`, { parse_mode: 'Markdown' });
         } catch (error: any) {
             await bot.sendMessage(chatId, `❌ An error occurred: ${error.message}`);

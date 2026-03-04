@@ -1,5 +1,5 @@
 import admin from 'firebase-admin';
-import serviceAccount from '../config/serviceAccountKey.json';
+import serviceAccount from './serviceAccountKey.json';
 
 admin.initializeApp({
   credential: admin.credential.cert(
@@ -12,4 +12,3 @@ console.log('Firebase Admin SDK initialized successfully.');
 
 export const db = admin.firestore();
 export const auth = admin.auth();
-

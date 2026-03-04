@@ -1,7 +1,10 @@
-
 import TelegramBot from 'node-telegram-bot-api';
-import { isAdmin, getUserByTelegramUsername } from '../services/authService';
+import { getUserByTelegramUsername, User } from '../../features/users/userService';
 import { RESPONSES } from '../utils/telegram';
+
+const isAdmin = (user: User | null): user is User => {
+    return user?.role === 'admin';
+};
 
 /**
  * Ensures the sender is a registered user.
@@ -36,11 +39,17 @@ export const adminOnly = (
 ) => authorized(bot, async (msg, match, username) => {
     const telegramUsername = msg.from?.username;
 
-    if (!telegramUsername || !(await isAdmin(telegramUsername))) {
+    if (!telegramUsername) {
+        bot.sendMessage(msg.chat.id, RESPONSES.ERROR("We couldn't get your Telegram username. Please set one in your Settings."), { parse_mode: 'Markdown' });
+        return;
+    }
+
+    const user = await getUserByTelegramUsername(telegramUsername);
+
+    if (!isAdmin(user)) {
         bot.sendMessage(msg.chat.id, RESPONSES.WARNING("⛔ **Admin Only Command.**\nAccess denied."), { parse_mode: 'Markdown' });
         return;
     }
 
     handler(msg, match, username);
 });
-

@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getAllUsers, UserData, updateUserTelegramUsername } from '../services/userService';
-import { setSession, getSession, clearSession } from '../../../shared/services/sessionManager';
+import { getAllUsers, updateUserTelegramUsername, User } from '../userService';
+import { setSession, getSession, clearSession } from '../../../core/bot/sessionManager';
 
 const EDIT_STAGES = {
     AWAIT_USER_SELECTION: 'AWAIT_USER_SELECTION',
@@ -21,7 +21,7 @@ export async function startEditUserFlow(bot: TelegramBot, chatId: number) {
             return;
         }
 
-        const userButtons = users.map(user => ([{
+        const userButtons = users.map((user: User) => ([{
             text: `${user.displayName} (${user.role}) - @${user.telegramUsername}`,
             callback_data: `edit_user_select_${user.id}`
         }]));
@@ -63,7 +63,7 @@ export async function handleEditUserResponse(bot: TelegramBot, response: { messa
     } else if (response.message?.text && session.stage === 'AWAIT_NEW_USERNAME') {
         const newUsername = response.message.text.replace(/^@/, '');
         try {
-            await updateUserTelegramUsername(session.userId!, newUsername, 'admin'); // Assuming admin is performing the action
+            await updateUserTelegramUsername(session.userId!, newUsername);
             await bot.sendMessage(chatId, `User @${newUsername} has been updated.`);
         } catch (error: any) {
             await bot.sendMessage(chatId, `Error updating user: ${error.message}`);

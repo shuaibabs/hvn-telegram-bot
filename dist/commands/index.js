@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerCommandHandlers = registerCommandHandlers;
-const users_1 = require("./users");
+const index_1 = require("../features/users/commands/index");
 function registerCommandHandlers(bot) {
-    (0, users_1.registerUserCommands)(bot);
+    (0, index_1.registerUserCommands)(bot);
 }
