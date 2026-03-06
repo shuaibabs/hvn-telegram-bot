@@ -5,6 +5,8 @@ import { CommandRouter } from '../router/commandRouter';
 import { registerGeneralCommands } from '../../commands/general';
 import { registerUserCommands } from '../../features/users/commands';
 import { registerUserFlows } from '../../features/users/flows';
+import { registerActivityCommands } from '../../features/activities/commands';
+import { registerActivityFlows } from '../../features/activities/flows';
 
 let bot: TelegramBot | null = null;
 let commandRouter: CommandRouter | null = null;
@@ -15,13 +17,15 @@ export function initializeBot(): TelegramBot {
         console.log("Bot has been initialized.");
 
         commandRouter = new CommandRouter(bot);
-        
+
         // Register commands
         registerGeneralCommands(commandRouter);
         registerUserCommands(commandRouter);
+        registerActivityCommands(commandRouter);
 
         // Register flows
         registerUserFlows(bot);
+        registerActivityFlows(bot);
 
         // Start listening for commands
         commandRouter.listen();

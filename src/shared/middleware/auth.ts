@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getUserByTelegramUsername, User } from '../../features/users/userService';
+import { getUserByTelegramUsername } from '../../features/users/userService';
+import { User } from '../../shared/types/data';
 import { RESPONSES } from '../utils/telegram';
 
 const isAdmin = (user: User | null): user is User => {

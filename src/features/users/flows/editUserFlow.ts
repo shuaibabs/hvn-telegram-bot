@@ -1,9 +1,14 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getAllUsers, updateUserTelegramUsername, User } from '../userService';
+import { getAllUsers, updateUserTelegramUsername, updateUserDisplayName } from '../userService';
+import { User } from '../../../shared/types/data';
 import { setSession, getSession, clearSession } from '../../../core/bot/sessionManager';
+import { logActivity } from '../../activities/activityService';
+import { escapeMarkdown } from '../../../shared/utils/telegram';
 
 const EDIT_STAGES = {
     AWAIT_USER_SELECTION: 'AWAIT_USER_SELECTION',
+    AWAIT_FIELD_SELECTION: 'AWAIT_FIELD_SELECTION',
+    AWAIT_NEW_NAME: 'AWAIT_NEW_NAME',
     AWAIT_NEW_USERNAME: 'AWAIT_NEW_USERNAME',
 } as const;
 
@@ -12,6 +17,9 @@ type EditUserSession = {
     userId?: string;
     displayName?: string;
 };
+
+const cancelBtn = { text: '❌ Cancel', callback_data: 'edit_user_cancel' };
+
 
 export async function startEditUserFlow(bot: TelegramBot, chatId: number) {
     try {
@@ -23,9 +31,11 @@ export async function startEditUserFlow(bot: TelegramBot, chatId: number) {
         }
 
         const userButtons = users.map((user: User) => ([{
-            text: `${user.displayName} (${user.role}) - @${user.telegramUsername}`,
-            callback_data: `edit_user_select_${user.id}:${user.displayName}`
+            text: `${user.displayName} - @${user.telegramUsername || 'N/A'}`,
+            callback_data: `edit_user_select_${user.id}`
         }]));
+
+        userButtons.push([cancelBtn]);
 
         const options = {
             reply_markup: {
@@ -39,7 +49,7 @@ export async function startEditUserFlow(bot: TelegramBot, chatId: number) {
         await bot.sendMessage(chatId, "*Select a user to edit:*", { parse_mode: 'Markdown', ...options });
 
     } catch (error: any) {
-        await bot.sendMessage(chatId, `Error fetching users: ${error.message}`);
+        await bot.sendMessage(chatId, `❌ Error fetching users: ${error.message}`);
     }
 }
 
@@ -50,19 +60,93 @@ async function handleUserSelection(bot: TelegramBot, callbackQuery: TelegramBot.
     const chatId = msg.chat.id;
     const session = getSession(chatId, 'editUser') as EditUserSession | undefined;
     if (!session || session.stage !== 'AWAIT_USER_SELECTION') return;
-    
-    const data = callbackQuery.data;
-    if (!data) return;
 
-    const [_, userId, displayName] = data.match(/edit_user_select_(.+):(.+)/) || [];
-    session.stage = 'AWAIT_NEW_USERNAME';
-    session.userId = userId;
-    session.displayName = displayName;
-    setSession(chatId, 'editUser', session);
+    const userId = callbackQuery.data?.replace('edit_user_select_', '');
+    if (!userId) return;
 
+    try {
+        const users = await getAllUsers();
+        const user = users.find(u => u.id === userId);
+        if (!user) throw new Error('User not found.');
+
+        session.stage = 'AWAIT_FIELD_SELECTION';
+        session.userId = userId;
+        session.displayName = user.displayName;
+        setSession(chatId, 'editUser', session);
+
+        await bot.answerCallbackQuery(callbackQuery.id);
+
+        const name = escapeMarkdown(user.displayName);
+        const username = escapeMarkdown(user.telegramUsername || 'N/A');
+
+        await bot.sendMessage(chatId, `Editing user: *${name}* (@${username})\n\nWhat would you like to update?`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '📝 Edit Name', callback_data: 'edit_user_field_name' }],
+                    [{ text: '👤 Edit Username', callback_data: 'edit_user_field_username' }],
+                    [cancelBtn]
+                ]
+            }
+        });
+    } catch (error: any) {
+        await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        clearSession(chatId, 'editUser');
+    }
+}
+
+async function handleFieldSelection(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
+    const chatId = callbackQuery.message!.chat.id;
+    const session = getSession(chatId, 'editUser') as EditUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_FIELD_SELECTION') return;
+
+    const field = callbackQuery.data;
     await bot.answerCallbackQuery(callbackQuery.id);
-    await bot.deleteMessage(chatId, msg.message_id);
-    await bot.sendMessage(chatId, `Please enter the new Telegram username for *${displayName}* (e.g., @newusername).`, { parse_mode: 'Markdown' });
+
+    if (field === 'edit_user_field_name') {
+        session.stage = 'AWAIT_NEW_NAME';
+        setSession(chatId, 'editUser', session);
+        await bot.sendMessage(chatId, `Enter the new full name for *${escapeMarkdown(session.displayName || '')}*:\n\n(Type /cancel to stop)`, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [[cancelBtn]] }
+        });
+    } else {
+        session.stage = 'AWAIT_NEW_USERNAME';
+        setSession(chatId, 'editUser', session);
+        await bot.sendMessage(chatId, `Enter the new Telegram username for *${escapeMarkdown(session.displayName || '')}* (e.g., @username):\n\n(Type /cancel to stop)`, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [[cancelBtn]] }
+        });
+    }
+}
+
+async function handleNameInput(bot: TelegramBot, message: TelegramBot.Message) {
+    const chatId = message.chat.id;
+    const session = getSession(chatId, 'editUser') as EditUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_NEW_NAME' || !session.userId) return;
+
+    const newName = message.text?.trim();
+    if (!newName || newName === '/cancel') return;
+
+    try {
+        await updateUserDisplayName(session.userId, newName);
+        const name = escapeMarkdown(newName);
+        const creator = message.from?.first_name + (message.from?.last_name ? ' ' + message.from?.last_name : '');
+
+        await bot.sendMessage(chatId, `✅ Success! Name updated to *${name}*.`, { parse_mode: 'Markdown' });
+
+        // Log Activity
+        await logActivity(bot, {
+            employeeName: session.displayName || 'Unknown',
+            action: 'UPDATE_USER_NAME',
+            description: `Updated name for user ${session.displayName} to ${newName}`,
+            createdBy: creator
+        }, true);
+    } catch (error: any) {
+        await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+    } finally {
+        clearSession(chatId, 'editUser');
+    }
 }
 
 async function handleUsernameInput(bot: TelegramBot, message: TelegramBot.Message) {
@@ -71,32 +155,62 @@ async function handleUsernameInput(bot: TelegramBot, message: TelegramBot.Messag
     if (!session || session.stage !== 'AWAIT_NEW_USERNAME' || !session.userId) return;
 
     const newUsername = message.text?.trim().replace(/^@/, '');
-    if (!newUsername) {
-        await bot.sendMessage(chatId, "Username cannot be empty. Please enter a valid username.");
-        return;
-    }
+    if (!newUsername || message.text === '/cancel') return;
 
     try {
         await updateUserTelegramUsername(session.userId, newUsername);
-        await bot.sendMessage(chatId, `✅ Success! User *${session.displayName}* has been updated to @${newUsername}.`, { parse_mode: 'Markdown' });
+        const username = escapeMarkdown(newUsername);
+        const creator = message.from?.first_name + (message.from?.last_name ? ' ' + message.from?.last_name : '');
+
+        await bot.sendMessage(chatId, `✅ Success! Username updated to @${username}.`, { parse_mode: 'Markdown' });
+
+        // Log Activity
+        await logActivity(bot, {
+            employeeName: session.displayName || 'Unknown',
+            action: 'UPDATE_USER_USERNAME',
+            description: `Updated telegram username for user ${session.displayName} to @${newUsername}`,
+            createdBy: creator
+        }, true);
     } catch (error: any) {
-        await bot.sendMessage(chatId, `❌ An error occurred: ${error.message}`);
+        await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
     } finally {
         clearSession(chatId, 'editUser');
     }
 }
 
-
 export function registerEditUserFlow(bot: TelegramBot) {
     bot.on('callback_query', (callbackQuery) => {
+        if (callbackQuery.data === 'edit_user_cancel') {
+            if (getSession(callbackQuery.message!.chat.id, 'editUser')) {
+                clearSession(callbackQuery.message!.chat.id, 'editUser');
+                bot.answerCallbackQuery(callbackQuery.id, { text: 'Edit cancelled' });
+                bot.sendMessage(callbackQuery.message!.chat.id, "❌ Edit flow cancelled.");
+            }
+            return;
+        }
+
         if (callbackQuery.data?.startsWith('edit_user_select_')) {
             handleUserSelection(bot, callbackQuery);
+        } else if (callbackQuery.data?.startsWith('edit_user_field_')) {
+            handleFieldSelection(bot, callbackQuery);
         }
     });
 
     bot.on('message', (message) => {
+        if (message.text === '/cancel') {
+            if (getSession(message.chat.id, 'editUser')) {
+                clearSession(message.chat.id, 'editUser');
+                bot.sendMessage(message.chat.id, "❌ Edit flow cancelled.");
+            }
+            return;
+        }
+
         const session = getSession(message.chat.id, 'editUser') as EditUserSession | undefined;
-        if (session && session.stage === 'AWAIT_NEW_USERNAME') {
+        if (!session) return;
+
+        if (session.stage === 'AWAIT_NEW_NAME') {
+            handleNameInput(bot, message);
+        } else if (session.stage === 'AWAIT_NEW_USERNAME') {
             handleUsernameInput(bot, message);
         }
     });

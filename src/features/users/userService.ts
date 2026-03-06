@@ -1,17 +1,14 @@
 import { db } from '../../config/firebase';
-
-export type UserRole = 'admin' | 'employee';
-
-export interface User {
-    uid?: string;
-    email: string;
-    displayName: string;
-    role: UserRole;
-    telegramUsername?: string;
-    id?: string;
-}
+import { User } from '../../shared/types/data';
+import { userSchema } from '../../shared/utils/validation';
 
 export const addUser = async (userData: User) => {
+    // Validate data structure
+    const validation = userSchema.partial().safeParse(userData);
+    if (!validation.success) {
+        throw new Error(`Data validation failed: ${validation.error.errors.map(e => e.message).join(', ')}`);
+    }
+
     const usersRef = db.collection('users');
 
     // Check if user already exists (by email or telegramUsername)
@@ -57,6 +54,15 @@ export const updateUserTelegramUsername = async (userId: string, telegramUsernam
     if (!userDoc.exists) throw new Error('User not found.');
 
     await userRef.update({ telegramUsername });
+};
+
+export const updateUserDisplayName = async (userId: string, displayName: string) => {
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) throw new Error('User not found.');
+
+    await userRef.update({ displayName });
 };
 
 export const getUserByTelegramUsername = async (telegramUsername: string): Promise<User | null> => {

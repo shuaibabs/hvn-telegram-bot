@@ -9,9 +9,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserByTelegramUsername = exports.updateUserTelegramUsername = exports.getAllUsers = exports.deleteUser = exports.addUser = void 0;
+exports.getUserByTelegramUsername = exports.updateUserDisplayName = exports.updateUserTelegramUsername = exports.getAllUsers = exports.deleteUser = exports.addUser = void 0;
 const firebase_1 = require("../../config/firebase");
+const validation_1 = require("../../shared/utils/validation");
 const addUser = (userData) => __awaiter(void 0, void 0, void 0, function* () {
+    // Validate data structure
+    const validation = validation_1.userSchema.partial().safeParse(userData);
+    if (!validation.success) {
+        throw new Error(`Data validation failed: ${validation.error.errors.map(e => e.message).join(', ')}`);
+    }
     const usersRef = firebase_1.db.collection('users');
     // Check if user already exists (by email or telegramUsername)
     if (userData.email) {
@@ -51,6 +57,14 @@ const updateUserTelegramUsername = (userId, telegramUsername) => __awaiter(void 
     yield userRef.update({ telegramUsername });
 });
 exports.updateUserTelegramUsername = updateUserTelegramUsername;
+const updateUserDisplayName = (userId, displayName) => __awaiter(void 0, void 0, void 0, function* () {
+    const userRef = firebase_1.db.collection('users').doc(userId);
+    const userDoc = yield userRef.get();
+    if (!userDoc.exists)
+        throw new Error('User not found.');
+    yield userRef.update({ displayName });
+});
+exports.updateUserDisplayName = updateUserDisplayName;
 const getUserByTelegramUsername = (telegramUsername) => __awaiter(void 0, void 0, void 0, function* () {
     const usersRef = firebase_1.db.collection('users');
     const querySnapshot = yield usersRef.where('telegramUsername', '==', telegramUsername).get();

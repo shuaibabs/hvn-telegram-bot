@@ -14,6 +14,8 @@ exports.registerCreateUserFlow = registerCreateUserFlow;
 const userService_1 = require("../userService");
 const sessionManager_1 = require("../../../core/bot/sessionManager");
 const emailValidation_1 = require("../../../shared/utils/emailValidation");
+const activityService_1 = require("../../activities/activityService");
+const telegram_1 = require("../../../shared/utils/telegram");
 const CREATE_STAGES = {
     AWAIT_NAME: 'AWAIT_NAME',
     AWAIT_EMAIL: 'AWAIT_EMAIL',
@@ -21,13 +23,18 @@ const CREATE_STAGES = {
     AWAIT_TELEGRAM: 'AWAIT_TELEGRAM',
     CONFIRM: 'CONFIRM',
 };
+const cancelBtn = { text: '❌ Cancel', callback_data: 'cancel_flow' };
 function startCreateUserFlow(bot, chatId) {
     return __awaiter(this, void 0, void 0, function* () {
         (0, sessionManager_1.setSession)(chatId, 'createUser', {
             stage: 'AWAIT_NAME',
             newUser: {},
         });
-        yield bot.sendMessage(chatId, "Let's create a new user. What is their full name?");
+        yield bot.sendMessage(chatId, "Let's create a new user. What is their full name?\n\n(Type /cancel to stop)", {
+            reply_markup: {
+                inline_keyboard: [[cancelBtn]]
+            }
+        });
     });
 }
 function handleNameInput(bot, msg) {
@@ -37,6 +44,8 @@ function handleNameInput(bot, msg) {
         if (!session || session.stage !== 'AWAIT_NAME')
             return;
         const name = (_a = msg.text) === null || _a === void 0 ? void 0 : _a.trim();
+        if (name === '/cancel')
+            return; // Handled by global command potentially, but safe here
         if (!name) {
             yield bot.sendMessage(msg.chat.id, "Name cannot be empty. Please enter the user's full name.");
             return;
@@ -44,7 +53,11 @@ function handleNameInput(bot, msg) {
         session.newUser.displayName = name;
         session.stage = 'AWAIT_EMAIL';
         (0, sessionManager_1.setSession)(msg.chat.id, 'createUser', session);
-        yield bot.sendMessage(msg.chat.id, `Got it. Now, what is ${name}'s email address?`);
+        yield bot.sendMessage(msg.chat.id, `Got it. Now, what is ${name}'s email address?\n\n(Type /cancel to stop)`, {
+            reply_markup: {
+                inline_keyboard: [[cancelBtn]]
+            }
+        });
     });
 }
 function handleEmailInput(bot, msg) {
@@ -54,22 +67,47 @@ function handleEmailInput(bot, msg) {
         if (!session || session.stage !== 'AWAIT_EMAIL')
             return;
         const email = (_a = msg.text) === null || _a === void 0 ? void 0 : _a.trim();
-        if (!email || !(0, emailValidation_1.isValidEmail)(email)) {
-            yield bot.sendMessage(msg.chat.id, "That doesn't look like a valid email. Please try again.");
+        if (email === '/cancel')
             return;
+        if (!email || !(0, emailValidation_1.isValidEmail)(email)) {
+            yield bot.sendMessage(msg.chat.id, "That doesn't look like a valid email. Please try again.", {
+                reply_markup: {
+                    inline_keyboard: [[cancelBtn]]
+                }
+            });
+            return;
+        }
+        // Check if email already exists
+        try {
+            const users = yield (0, userService_1.getAllUsers)();
+            if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+                yield bot.sendMessage(msg.chat.id, `❌ The email *${email}* is already in use. Please enter a different email address.`, {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [[cancelBtn]]
+                    }
+                });
+                return;
+            }
+        }
+        catch (error) {
+            console.error('Error checking duplicate email:', error);
         }
         session.newUser.email = email;
         session.stage = 'AWAIT_ROLE';
         (0, sessionManager_1.setSession)(msg.chat.id, 'createUser', session);
         yield bot.sendMessage(msg.chat.id, 'What role should this user have?', {
             reply_markup: {
-                inline_keyboard: [[{
+                inline_keyboard: [
+                    [{
                             text: '👑 Admin',
                             callback_data: 'create_user_role_admin'
                         }, {
                             text: '👷 Employee',
                             callback_data: 'create_user_role_employee'
-                        }]],
+                        }],
+                    [cancelBtn]
+                ],
             },
         });
     });
@@ -84,7 +122,11 @@ function handleRoleSelection(bot, callbackQuery) {
         session.stage = 'AWAIT_TELEGRAM';
         (0, sessionManager_1.setSession)(callbackQuery.message.chat.id, 'createUser', session);
         yield bot.answerCallbackQuery(callbackQuery.id);
-        yield bot.sendMessage(callbackQuery.message.chat.id, `Role set to ${role}. Finally, what is their Telegram username? (e.g., @username)`);
+        yield bot.sendMessage(callbackQuery.message.chat.id, `Role set to ${role}. Finally, what is their Telegram username? (e.g., @username)\n\n(Type /cancel to stop)`, {
+            reply_markup: {
+                inline_keyboard: [[cancelBtn]]
+            }
+        });
     });
 }
 function handleTelegramInput(bot, msg) {
@@ -93,9 +135,16 @@ function handleTelegramInput(bot, msg) {
         const session = (0, sessionManager_1.getSession)(msg.chat.id, 'createUser');
         if (!session || session.stage !== 'AWAIT_TELEGRAM')
             return;
-        const username = (_a = msg.text) === null || _a === void 0 ? void 0 : _a.trim().replace(/^@/, '');
+        const text = (_a = msg.text) === null || _a === void 0 ? void 0 : _a.trim();
+        if (text === '/cancel')
+            return;
+        const username = text === null || text === void 0 ? void 0 : text.replace(/^@/, '');
         if (!username) {
-            yield bot.sendMessage(msg.chat.id, "Username cannot be empty. Please enter their Telegram username.");
+            yield bot.sendMessage(msg.chat.id, "Username cannot be empty. Please enter their Telegram username.", {
+                reply_markup: {
+                    inline_keyboard: [[cancelBtn]]
+                }
+            });
             return;
         }
         session.newUser.telegramUsername = username;
@@ -106,7 +155,10 @@ function handleTelegramInput(bot, msg) {
 }
 function sendConfirmation(bot, chatId, session) {
     return __awaiter(this, void 0, void 0, function* () {
-        const { displayName, email, role, telegramUsername } = session.newUser;
+        const displayName = (0, telegram_1.escapeMarkdown)(session.newUser.displayName || '');
+        const email = (0, telegram_1.escapeMarkdown)(session.newUser.email || '');
+        const role = (0, telegram_1.escapeMarkdown)(session.newUser.role || '');
+        const telegramUsername = (0, telegram_1.escapeMarkdown)(session.newUser.telegramUsername || '');
         const text = `Please confirm the details:\n\n*Name*: ${displayName}\n*Email*: ${email}\n*Role*: ${role}\n*Telegram*: @${telegramUsername}\n\nDoes this look correct?`;
         yield bot.sendMessage(chatId, text, {
             parse_mode: 'Markdown',
@@ -115,9 +167,9 @@ function sendConfirmation(bot, chatId, session) {
                             text: '✅ Yes, Create User',
                             callback_data: 'create_user_confirm_yes'
                         }], [{
-                            text: '❌ No, Start Over',
+                            text: '🔄 No, Start Over',
                             callback_data: 'create_user_confirm_no'
-                        }]],
+                        }], [cancelBtn]],
             },
         });
     });
@@ -133,21 +185,39 @@ function handleConfirmation(bot, callbackQuery) {
         if (decision === 'create_user_confirm_yes') {
             try {
                 yield (0, userService_1.addUser)(session.newUser);
-                yield bot.sendMessage(chatId, `✅ Success! User *${session.newUser.displayName}* has been created.`, { parse_mode: 'Markdown' });
+                const name = (0, telegram_1.escapeMarkdown)(session.newUser.displayName || '');
+                const creator = callbackQuery.from.first_name + (callbackQuery.from.last_name ? ' ' + callbackQuery.from.last_name : '');
+                yield bot.sendMessage(chatId, `✅ Success! User *${name}* has been created.`, { parse_mode: 'Markdown' });
+                // Log Activity
+                yield (0, activityService_1.logActivity)(bot, {
+                    employeeName: session.newUser.displayName || 'Unknown',
+                    action: 'CREATE_USER',
+                    description: `Created new user ${session.newUser.displayName} with role ${session.newUser.role}`,
+                    createdBy: creator
+                }, true); // shouldBroadcast = true for successful completion
+                (0, sessionManager_1.clearSession)(chatId, 'createUser');
             }
             catch (error) {
                 yield bot.sendMessage(chatId, `❌ An error occurred: ${error.message}`);
+                // Keep session for retry if needed? For now just clear
+                (0, sessionManager_1.clearSession)(chatId, 'createUser');
             }
         }
         else {
-            yield bot.sendMessage(chatId, "Cancelled. Let's start over.");
+            yield bot.sendMessage(chatId, "Let's start over.");
             yield startCreateUserFlow(bot, chatId);
         }
-        (0, sessionManager_1.clearSession)(chatId, 'createUser');
     });
 }
 function registerCreateUserFlow(bot) {
     bot.on('message', (msg) => {
+        if (msg.text === '/cancel') {
+            if ((0, sessionManager_1.getSession)(msg.chat.id, 'createUser')) {
+                (0, sessionManager_1.clearSession)(msg.chat.id, 'createUser');
+                bot.sendMessage(msg.chat.id, "❌ Creation flow cancelled.");
+            }
+            return;
+        }
         const session = (0, sessionManager_1.getSession)(msg.chat.id, 'createUser');
         if (!session)
             return;
@@ -165,6 +235,14 @@ function registerCreateUserFlow(bot) {
     });
     bot.on('callback_query', (callbackQuery) => {
         var _a, _b;
+        if (callbackQuery.data === 'cancel_flow') {
+            if ((0, sessionManager_1.getSession)(callbackQuery.message.chat.id, 'createUser')) {
+                (0, sessionManager_1.clearSession)(callbackQuery.message.chat.id, 'createUser');
+                bot.answerCallbackQuery(callbackQuery.id, { text: 'Flow cancelled' });
+                bot.sendMessage(callbackQuery.message.chat.id, "❌ Creation flow cancelled.");
+            }
+            return;
+        }
         const session = (0, sessionManager_1.getSession)(callbackQuery.message.chat.id, 'createUser');
         if (!session)
             return;

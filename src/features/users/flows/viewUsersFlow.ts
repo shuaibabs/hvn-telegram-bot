@@ -1,5 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getAllUsers, User } from '../userService';
+import { getAllUsers } from '../userService';
+import { User } from '../../../shared/types/data';
+import { escapeMarkdown } from '../../../shared/utils/telegram';
 
 export async function listUsers(bot: TelegramBot, chatId: number) {
     try {
@@ -11,7 +13,10 @@ export async function listUsers(bot: TelegramBot, chatId: number) {
         }
 
         const userList = users.map((user: User) => {
-            return `*${user.displayName}* (${user.role}) - @${user.telegramUsername}`;
+            const name = escapeMarkdown(user.displayName);
+            const role = escapeMarkdown(user.role);
+            const username = escapeMarkdown(user.telegramUsername || 'N/A');
+            return `*${name}* (${role}) - @${username}`;
         }).join('\n');
 
         const message = `*All Users: *\n\n${userList}`;

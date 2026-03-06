@@ -11,6 +11,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listUsersCommand = listUsersCommand;
 const userService_1 = require("../userService");
+/**
+ * Escapes special characters for Telegram Markdown (V1)
+ * Characters: _, *, [
+ */
+function escapeMarkdown(text) {
+    return text.replace(/[_*\[]/g, '\\$&');
+}
 function listUsersCommand(bot, msg) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -21,12 +28,17 @@ function listUsersCommand(bot, msg) {
             }
             else {
                 users.forEach(user => {
-                    message += `\n*${user.displayName}* (@${user.telegramUsername}) - ${user.role}\nEmail: ${user.email}\n`;
+                    const name = escapeMarkdown(user.displayName);
+                    const username = escapeMarkdown(user.telegramUsername || 'N/A');
+                    const role = escapeMarkdown(user.role);
+                    const email = escapeMarkdown(user.email);
+                    message += `\n*${name}* (@${username}) - ${role}\nEmail: ${email}\n`;
                 });
             }
             bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
         }
         catch (error) {
+            console.error('Error in listUsersCommand:', error);
             bot.sendMessage(msg.chat.id, `Error fetching users: ${error.message}`);
         }
     });

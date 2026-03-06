@@ -13,6 +13,7 @@ exports.setSession = setSession;
 exports.getSession = getSession;
 exports.clearSession = clearSession;
 exports.hasSession = hasSession;
+exports.hasAnySession = hasAnySession;
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const sessions = new Map();
 /** Start or overwrite a session for a user in a specific flow */
@@ -53,5 +54,11 @@ function clearSession(userId, flow) {
 }
 /** Check whether a user is currently inside a specific flow */
 function hasSession(userId, flow) {
-    return sessions.has(userId) && sessions.get(userId).has(flow);
+    var _a, _b;
+    return (_b = (_a = sessions.get(userId)) === null || _a === void 0 ? void 0 : _a.has(flow)) !== null && _b !== void 0 ? _b : false;
+}
+/** Check whether a user is currently inside ANY active flow */
+function hasAnySession(userId) {
+    var _a, _b;
+    return ((_b = (_a = sessions.get(userId)) === null || _a === void 0 ? void 0 : _a.size) !== null && _b !== void 0 ? _b : 0) > 0;
 }

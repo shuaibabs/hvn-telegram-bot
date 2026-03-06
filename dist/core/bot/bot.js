@@ -11,6 +11,8 @@ const commandRouter_1 = require("../router/commandRouter");
 const general_1 = require("../../commands/general");
 const commands_1 = require("../../features/users/commands");
 const flows_1 = require("../../features/users/flows");
+const commands_2 = require("../../features/activities/commands");
+const flows_2 = require("../../features/activities/flows");
 let bot = null;
 let commandRouter = null;
 function initializeBot() {
@@ -21,8 +23,10 @@ function initializeBot() {
         // Register commands
         (0, general_1.registerGeneralCommands)(commandRouter);
         (0, commands_1.registerUserCommands)(commandRouter);
+        (0, commands_2.registerActivityCommands)(commandRouter);
         // Register flows
         (0, flows_1.registerUserFlows)(bot);
+        (0, flows_2.registerActivityFlows)(bot);
         // Start listening for commands
         commandRouter.listen();
         // Generic error handling

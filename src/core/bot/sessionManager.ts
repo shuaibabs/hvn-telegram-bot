@@ -64,5 +64,10 @@ export function clearSession(userId: number, flow: string): void {
 
 /** Check whether a user is currently inside a specific flow */
 export function hasSession(userId: number, flow: string): boolean {
-    return sessions.has(userId) && sessions.get(userId)!.has(flow);
+    return sessions.get(userId)?.has(flow) ?? false;
+}
+
+/** Check whether a user is currently inside ANY active flow */
+export function hasAnySession(userId: number): boolean {
+    return (sessions.get(userId)?.size ?? 0) > 0;
 }

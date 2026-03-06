@@ -1,36 +1,30 @@
+import { env } from '../config/env';
 import { CommandRouter } from '../core/router/commandRouter';
+import TelegramBot from 'node-telegram-bot-api';
 
 export function registerGeneralCommands(router: CommandRouter) {
-    // Health check command
-    router.register(/\/health/, (msg) => {
+    // Health check command - keep as global for now or restrict if needed
+    router.register(/\/health/, (msg: TelegramBot.Message) => {
         const chatId = msg.chat.id;
         router.bot.sendMessage(chatId, '✅ Bot is up and running!');
     });
 
-    // Start command
-    router.register(/\/start/, (msg) => {
-        const chatId = msg.chat.id;
-        const welcomeMessage = `
-👋 Welcome to the Bot!
+    // Fallback handler for unrecognized commands
+    router.setFallbackHandler((msg: TelegramBot.Message) => {
+        const chatId = msg.chat.id.toString();
 
-Here are the available commands:
-/start - Show this welcome message
-/menu - Display the main menu
-/health - Check bot\'s health status
-`;
-        router.bot.sendMessage(chatId, welcomeMessage);
-    });
+        let callbackData = 'manage_users_start'; // Default
+        if (chatId === env.TG_GROUP_ACTIVITY) {
+            callbackData = 'manage_activities_start';
+        } else if (chatId === env.TG_GROUP_USERS) {
+            callbackData = 'manage_users_start';
+        }
 
-    // Menu command
-    router.register(/\/menu/, (msg) => {
-        const chatId = msg.chat.id;
-        // For now, let\'s make the menu simple. It can be expanded later.
-        const menuMessage = `
-📋 Main Menu
-
-Select an option:
-(No options implemented yet)
-`;
-        router.bot.sendMessage(chatId, menuMessage);
+        router.bot.sendMessage(msg.chat.id, "😕 *Unrecognized Command*\n\nIt's not the correct command. Please use /start to see available options.", {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [[{ text: '🚀 Get Started', callback_data: callbackData }]]
+            }
+        });
     });
 }

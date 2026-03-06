@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listUsers = listUsers;
 const userService_1 = require("../userService");
+const telegram_1 = require("../../../shared/utils/telegram");
 function listUsers(bot, chatId) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -20,7 +21,10 @@ function listUsers(bot, chatId) {
                 return;
             }
             const userList = users.map((user) => {
-                return `*${user.displayName}* (${user.role}) - @${user.telegramUsername}`;
+                const name = (0, telegram_1.escapeMarkdown)(user.displayName);
+                const role = (0, telegram_1.escapeMarkdown)(user.role);
+                const username = (0, telegram_1.escapeMarkdown)(user.telegramUsername || 'N/A');
+                return `*${name}* (${role}) - @${username}`;
             }).join('\n');
             const message = `*All Users: *\n\n${userList}`;
             yield bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });

@@ -1,5 +1,23 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getAllUsers, deleteUser, User } from '../userService';
+import { getAllUsers, deleteUser } from '../userService';
+import { User } from '../../../shared/types/data';
+import { setSession, getSession, clearSession } from '../../../core/bot/sessionManager';
+import { logActivity } from '../../activities/activityService';
+import { escapeMarkdown } from '../../../shared/utils/telegram';
+
+const DELETE_STAGES = {
+    AWAIT_USER_SELECTION: 'AWAIT_USER_SELECTION',
+    AWAIT_CONFIRMATION: 'AWAIT_CONFIRMATION',
+} as const;
+
+type DeleteUserSession = {
+    stage: keyof typeof DELETE_STAGES;
+    userId?: string;
+    displayName?: string;
+};
+
+const cancelBtn = { text: '❌ Cancel', callback_data: 'delete_user_cancel' };
+
 
 export async function startDeleteUserFlow(bot: TelegramBot, chatId: number) {
     try {
@@ -10,9 +28,15 @@ export async function startDeleteUserFlow(bot: TelegramBot, chatId: number) {
         }
 
         const userButtons = users.map((user: User) => ([{
-            text: `${user.displayName} (@${user.telegramUsername})`,
+            text: `${user.displayName} (@${user.telegramUsername || 'N/A'})`,
             callback_data: `delete_user_select_${user.id}`,
         }]));
+
+        userButtons.push([cancelBtn]);
+
+        setSession(chatId, 'deleteUser', {
+            stage: 'AWAIT_USER_SELECTION',
+        });
 
         await bot.sendMessage(chatId, "*Select a user to delete:*", {
             parse_mode: 'Markdown',
@@ -21,57 +45,102 @@ export async function startDeleteUserFlow(bot: TelegramBot, chatId: number) {
             },
         });
     } catch (error: any) {
-        await bot.sendMessage(chatId, `Error fetching users: ${error.message}`);
+        await bot.sendMessage(chatId, `❌ Error fetching users: ${error.message}`);
     }
 }
 
 async function handleUserSelection(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
-    const userId = callbackQuery.data?.split('_').pop();
-    const messageId = callbackQuery.message?.message_id;
-    const chatId = callbackQuery.message?.chat.id;
+    const chatId = callbackQuery.message!.chat.id;
+    const session = getSession(chatId, 'deleteUser') as DeleteUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_USER_SELECTION') return;
 
-    if (!userId || !chatId || !messageId) return;
+    const userId = callbackQuery.data?.replace('delete_user_select_', '');
+    if (!userId) return;
 
-    await bot.deleteMessage(chatId, messageId);
+    try {
+        const users = await getAllUsers();
+        const user = users.find(u => u.id === userId);
+        if (!user) throw new Error('User not found.');
 
-    await bot.sendMessage(chatId, "Are you sure you want to delete this user?", {
-        reply_markup: {
-            inline_keyboard: [[
-                { text: "Yes, I'm sure", callback_data: `delete_user_confirm_${userId}` },
-                { text: "No, cancel", callback_data: 'delete_user_cancel' },
-            ]],
-        },
-    });
+        session.stage = 'AWAIT_CONFIRMATION';
+        session.userId = userId;
+        session.displayName = user.displayName;
+        setSession(chatId, 'deleteUser', session);
+
+        await bot.answerCallbackQuery(callbackQuery.id);
+
+        const name = escapeMarkdown(user.displayName);
+        await bot.sendMessage(chatId, `Are you sure you want to delete user *${name}*?`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [[
+                    { text: "✅ Yes, I'm sure", callback_data: `delete_user_confirm_yes` },
+                    cancelBtn,
+                ]],
+            },
+        });
+    } catch (error: any) {
+        await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        clearSession(chatId, 'deleteUser');
+    }
 }
 
 async function handleConfirmation(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
-    const userId = callbackQuery.data?.split('_').pop();
-    const messageId = callbackQuery.message?.message_id;
-    const chatId = callbackQuery.message?.chat.id;
+    const chatId = callbackQuery.message!.chat.id;
+    const session = getSession(chatId, 'deleteUser') as DeleteUserSession | undefined;
+    if (!session || session.stage !== 'AWAIT_CONFIRMATION' || !session.userId) return;
 
-    if (!userId || !chatId || !messageId) return;
+    const decision = callbackQuery.data;
+    await bot.answerCallbackQuery(callbackQuery.id);
 
-    await bot.deleteMessage(chatId, messageId);
-
-    if (callbackQuery.data?.startsWith('delete_user_confirm_')) {
+    if (decision === 'delete_user_confirm_yes') {
         try {
-            await deleteUser(userId);
-            await bot.sendMessage(chatId, "User has been deleted.");
+            await deleteUser(session.userId);
+            const name = escapeMarkdown(session.displayName || '');
+            const creator = callbackQuery.from.first_name + (callbackQuery.from.last_name ? ' ' + callbackQuery.from.last_name : '');
+
+            await bot.sendMessage(chatId, `✅ Success! User *${name}* has been deleted.`, { parse_mode: 'Markdown' });
+
+            // Log Activity
+            await logActivity(bot, {
+                employeeName: session.displayName || 'Unknown',
+                action: 'DELETE_USER',
+                description: `Deleted user ${session.displayName}`,
+                createdBy: creator
+            }, true);
         } catch (error: any) {
-            await bot.sendMessage(chatId, `Error deleting user: ${error.message}`);
+            await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        } finally {
+            clearSession(chatId, 'deleteUser');
         }
-    } else {
-        await bot.sendMessage(chatId, "Deletion cancelled.");
     }
 }
 
 export function registerDeleteUserFlow(bot: TelegramBot) {
     bot.on('callback_query', (callbackQuery) => {
+        if (callbackQuery.data === 'delete_user_cancel') {
+            if (getSession(callbackQuery.message!.chat.id, 'deleteUser')) {
+                clearSession(callbackQuery.message!.chat.id, 'deleteUser');
+                bot.answerCallbackQuery(callbackQuery.id, { text: 'Deletion cancelled' });
+                bot.sendMessage(callbackQuery.message!.chat.id, "❌ Deletion flow cancelled.");
+            }
+            return;
+        }
+
         if (callbackQuery.data?.startsWith('delete_user_select_')) {
             handleUserSelection(bot, callbackQuery);
-        }
-        if (callbackQuery.data?.startsWith('delete_user_confirm_') || callbackQuery.data === 'delete_user_cancel') {
+        } else if (callbackQuery.data === 'delete_user_confirm_yes') {
             handleConfirmation(bot, callbackQuery);
+        }
+    });
+
+    bot.on('message', (message) => {
+        if (message.text === '/cancel') {
+            if (getSession(message.chat.id, 'deleteUser')) {
+                clearSession(message.chat.id, 'deleteUser');
+                bot.sendMessage(message.chat.id, "❌ Deletion flow cancelled.");
+            }
+            return;
         }
     });
 }

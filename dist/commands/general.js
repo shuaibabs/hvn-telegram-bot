@@ -1,35 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerGeneralCommands = registerGeneralCommands;
+const env_1 = require("../config/env");
 function registerGeneralCommands(router) {
-    // Health check command
+    // Health check command - keep as global for now or restrict if needed
     router.register(/\/health/, (msg) => {
         const chatId = msg.chat.id;
         router.bot.sendMessage(chatId, '✅ Bot is up and running!');
     });
-    // Start command
-    router.register(/\/start/, (msg) => {
-        const chatId = msg.chat.id;
-        const welcomeMessage = `
-👋 Welcome to the Bot!
-
-Here are the available commands:
-/start - Show this welcome message
-/menu - Display the main menu
-/health - Check bot\'s health status
-`;
-        router.bot.sendMessage(chatId, welcomeMessage);
-    });
-    // Menu command
-    router.register(/\/menu/, (msg) => {
-        const chatId = msg.chat.id;
-        // For now, let\'s make the menu simple. It can be expanded later.
-        const menuMessage = `
-📋 Main Menu
-
-Select an option:
-(No options implemented yet)
-`;
-        router.bot.sendMessage(chatId, menuMessage);
+    // Fallback handler for unrecognized commands
+    router.setFallbackHandler((msg) => {
+        const chatId = msg.chat.id.toString();
+        let callbackData = 'manage_users_start'; // Default
+        if (chatId === env_1.env.TG_GROUP_ACTIVITY) {
+            callbackData = 'manage_activities_start';
+        }
+        else if (chatId === env_1.env.TG_GROUP_USERS) {
+            callbackData = 'manage_users_start';
+        }
+        router.bot.sendMessage(msg.chat.id, "😕 *Unrecognized Command*\n\nIt's not the correct command. Please use /start to see available options.", {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [[{ text: '🚀 Get Started', callback_data: callbackData }]]
+            }
+        });
     });
 }
